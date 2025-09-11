@@ -1,8 +1,15 @@
+import 'dart:nativewrappers/_internal/vm/lib/developer.dart';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:manga_muli_language_viewer/screens/discover_page.dart';
 import 'package:manga_muli_language_viewer/screens/reader_page.dart';
+import 'package:provider/provider.dart';
+import 'package:stash/stash_api.dart';
+import 'package:stash_dio/stash_dio.dart';
+import 'package:stash_memory/stash_memory.dart';
 
 /// This method initializes macos_window_utils and styles the window.
 Future<void> _configureMacosWindowUtils() async {
@@ -11,14 +18,39 @@ Future<void> _configureMacosWindowUtils() async {
 }
 
 Future<void> main() async {
+  // Creates a store
+  final store = await newMemoryCacheStore();
+  // Creates a cache
+  final cache = await store.cache(
+      eventListenerMode: EventListenerMode.synchronous)
+    ..on<CacheEntryCreatedEvent>()
+        .listen((event) => log('Key "${event.entry.key}" added to the cache'));
+
+  // Configures a a dio client
+  final dio = Dio(BaseOptions(baseUrl: 'https://api.mangadex.dev'))
+    ..interceptors.addAll([
+      cache.interceptor('*'),
+      LogInterceptor(
+        requestHeader: false,
+        requestBody: false,
+        responseHeader: false,
+        responseBody: false,
+      )
+    ]);
+
   await _configureMacosWindowUtils();
-  runApp(const App());
+  MultiProvider(
+    providers: [
+      Provider<Dio>(create: (context) => dio),
+      Provider<Cache>(create: (context) => cache),
+    ],
+    child: const App(),
+  );
 }
 
 class App extends StatelessWidget {
   const App({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MacosApp(

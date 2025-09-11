@@ -20,6 +20,7 @@ dependencies:
   file_picker: ^10.3.3
   manga_page_view: ^1.0.5
   provider: ^6.1.5+1
+  stash_memory: ^5.2.0
 
 dev_dependencies:
   flutter_test:

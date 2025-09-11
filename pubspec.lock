@@ -373,6 +373,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.2.0"
+  stash_memory:
+    dependency: "direct main"
+    description:
+      name: stash_memory
+      sha256: "84ffcc108d345909dc40bd11d43e3fe87a115c30b157ca2bfa8e84c0e313d5c4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.2.0"
   stream_channel:
     dependency: transitive
     description:
