@@ -1,9 +1,204 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:macos_ui/macos_ui.dart';
+import 'package:provider/provider.dart';
+import '../models/manga.dart';
+import '../services/mangadx_service.dart';
+import '../widget/discover/manga_card.dart';
 
-class DiscoverPage extends StatelessWidget {
+class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
+
+  @override
+  State<DiscoverPage> createState() => _DiscoverPageState();
+}
+
+class _DiscoverPageState extends State<DiscoverPage> {
+  late MangaDexService _mangaDexService;
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  List<Manga> _mangas = [];
+  bool _isLoading = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  String? _currentSearchTerm;
+  int _currentOffset = 0;
+  DateTime? _lastLoadMoreTime;
+  static const int _pageSize =
+      32; // Increased from 20 to 32 for better performance
+
+  @override
+  void initState() {
+    super.initState();
+    _mangaDexService = MangaDexService(context.read<Dio>());
+    _loadPopularManga();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!mounted) return;
+
+    final scrollController = _scrollController;
+    if (!scrollController.hasClients) return;
+
+    final position = scrollController.position;
+    final maxScrollExtent = position.maxScrollExtent;
+    final currentPixels = position.pixels;
+
+    // More aggressive loading triggers for better UX
+    final triggerDistance = 600.0; // Increased from 400 to be more proactive
+    final triggerPercentage = 0.75; // Reduced from 0.8 to trigger earlier
+
+    final isNearBottom = currentPixels >= (maxScrollExtent - triggerDistance);
+    final isPastThreshold = maxScrollExtent > 0 &&
+        (currentPixels / maxScrollExtent) >= triggerPercentage;
+
+    // Add throttling to prevent too frequent API calls
+    final now = DateTime.now();
+    final timeSinceLastLoad = _lastLoadMoreTime != null
+        ? now.difference(_lastLoadMoreTime!)
+        : const Duration(seconds: 10);
+
+    if ((isNearBottom || isPastThreshold) &&
+        _hasMore &&
+        !_isLoadingMore &&
+        timeSinceLastLoad.inSeconds >= 1) {
+      // Throttle to max 1 call per second
+      _lastLoadMoreTime = now;
+      _loadMoreManga();
+    }
+  }
+
+  Future<void> _loadPopularManga() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _mangas.clear();
+      _currentOffset = 0;
+      _hasMore = true;
+      _currentSearchTerm = null;
+    });
+
+    try {
+      final response = await _mangaDexService.getPopularManga(
+        limit: _pageSize,
+        offset: 0,
+        loadCoversImmediately: false, // Load covers asynchronously
+      );
+
+      setState(() {
+        _mangas = response.data;
+        _currentOffset = _pageSize;
+        _hasMore = response.data.length >= _pageSize;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        _showErrorDialog('Failed to load manga: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _searchManga(String searchTerm) async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _mangas.clear();
+      _currentOffset = 0;
+      _hasMore = true;
+      _currentSearchTerm = searchTerm.trim().isEmpty ? null : searchTerm.trim();
+    });
+
+    try {
+      final response = await _mangaDexService.searchManga(
+        query: _currentSearchTerm.toString(),
+        limit: _pageSize,
+        offset: 0,
+        loadCoversImmediately: false, // Load covers asynchronously
+      );
+
+      setState(() {
+        _mangas = response.data;
+        _currentOffset = _pageSize;
+        _hasMore = response.data.length >= _pageSize;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        _showErrorDialog('Failed to search manga: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _loadMoreManga() async {
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      final query =
+          _currentSearchTerm?.isEmpty ?? true ? '' : _currentSearchTerm!;
+      final response = await _mangaDexService.searchManga(
+        query: query,
+        limit: _pageSize,
+        offset: _currentOffset,
+        loadCoversImmediately: false, // Load covers asynchronously
+      );
+
+      if (mounted) {
+        setState(() {
+          _mangas.addAll(response.data);
+          _currentOffset +=
+              response.data.length; // Use actual length instead of _pageSize
+          _hasMore = response.data.length >= _pageSize;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+        // Don't show error dialog for load more failures to avoid interrupting UX
+        print('Failed to load more manga: $e');
+      }
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showMacosAlertDialog(
+      context: context,
+      builder: (context) => MacosAlertDialog(
+        appIcon: const MacosIcon(CupertinoIcons.exclamationmark_triangle),
+        title: const Text('Error'),
+        message: Text(message),
+        primaryButton: PushButton(
+          controlSize: ControlSize.large,
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('OK'),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +237,179 @@ class DiscoverPage extends StatelessWidget {
           children: [
             ContentArea(
               builder: (context, scrollController) {
-                return const Center(
-                  child: Text('Discover'),
+                return Column(
+                  children: [
+                    // Search Bar
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: MacosTheme.brightnessOf(context).resolve(
+                            const Color(0xFFF2F2F7),
+                            const Color(0xFF2C2C2E),
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: MacosTheme.brightnessOf(context).resolve(
+                              const Color(0xFFD1D1D6),
+                              const Color(0xFF38383A),
+                            ),
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: TextField(
+                            controller: _searchController,
+                            style: MacosTheme.of(context).typography.body,
+                            decoration: InputDecoration(
+                              hintText: 'Search manga...',
+                              hintStyle: MacosTheme.of(context)
+                                  .typography
+                                  .body
+                                  .copyWith(
+                                    color: MacosTheme.brightnessOf(context)
+                                        .resolve(
+                                      const Color(0xFF8E8E93),
+                                      const Color(0xFF636366),
+                                    ),
+                                  ),
+                              prefixIcon: Icon(
+                                CupertinoIcons.search,
+                                color: MacosTheme.brightnessOf(context).resolve(
+                                  const Color(0xFF8E8E93),
+                                  const Color(0xFF636366),
+                                ),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            onSubmitted: _searchManga,
+                            onChanged: (value) {
+                              if (value.isEmpty) {
+                                _loadPopularManga();
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Content
+                    Expanded(
+                      child: _buildContent(),
+                    ),
+                  ],
                 );
               },
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading && _mangas.isEmpty) {
+      return const Center(
+        child: ProgressCircle(radius: 20),
+      );
+    }
+
+    if (_mangas.isEmpty && !_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            MacosIcon(
+              CupertinoIcons.search,
+              size: 64,
+              color: MacosTheme.brightnessOf(context).resolve(
+                const Color(0xFF8E8E93),
+                const Color(0xFF636366),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _currentSearchTerm != null
+                  ? 'No manga found for "$_currentSearchTerm"'
+                  : 'No manga available',
+              style: MacosTheme.of(context).typography.headline,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _currentSearchTerm != null
+                  ? 'Try searching with different keywords'
+                  : 'Check your internet connection',
+              style: MacosTheme.of(context).typography.body,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 170, // Slightly reduced to fit more items
+              childAspectRatio: 0.65, // Adjusted for better proportions
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index < _mangas.length) {
+                  return MangaCard(
+                    manga: _mangas[index],
+                    mangaDexService: _mangaDexService,
+                    onTap: () {
+                      // TODO: Navigate to manga details
+                      print('Tapped on: ${_mangas[index].title}');
+                    },
+                  );
+                }
+                return null;
+              },
+              childCount: _mangas.length,
+            ),
+          ),
+        ),
+
+        // Loading indicator at bottom
+        if (_isLoadingMore)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: ProgressCircle(radius: 16),
+              ),
+            ),
+          ),
+
+        // Show "Load More" button as fallback if near end but not auto-loading
+        if (_hasMore &&
+            !_isLoadingMore &&
+            !_isLoading &&
+            _mangas.length >= _pageSize)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: PushButton(
+                  controlSize: ControlSize.large,
+                  onPressed: _loadMoreManga,
+                  child: const Text('Load More'),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

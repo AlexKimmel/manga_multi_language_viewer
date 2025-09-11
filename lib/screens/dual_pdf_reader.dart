@@ -67,8 +67,7 @@ class _DualPdfReaderState extends State<DualPdfReader> {
 
 class _OverlayPage extends StatefulWidget {
   final Widget top, bottom;
-  const _OverlayPage({required this.top, required this.bottom, Key? key})
-      : super(key: key);
+  const _OverlayPage({required this.top, required this.bottom, super.key});
 
   @override
   State<_OverlayPage> createState() => _OverlayPageState();
@@ -79,7 +78,7 @@ class _OverlayPageState extends State<_OverlayPage> {
   late final FocusNode _focusNode;
 
   Offset? _pointer;
-  double _radius = 90;
+  final double _radius = 90;
 
   @override
   void initState() {
@@ -114,13 +113,15 @@ class _OverlayPageState extends State<_OverlayPage> {
         child: Listener(
           onPointerDown: (event) {
             final box = context.findRenderObject() as RenderBox?;
-            if (box != null)
+            if (box != null) {
               setState(() => _pointer = box.globalToLocal(event.position));
+            }
           },
           onPointerMove: (event) {
             final box = context.findRenderObject() as RenderBox?;
-            if (box != null)
+            if (box != null) {
               setState(() => _pointer = box.globalToLocal(event.position));
+            }
           },
           onPointerUp: (_) => setState(() => _pointer = null),
           child: Stack(

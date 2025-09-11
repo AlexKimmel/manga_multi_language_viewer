@@ -1,4 +1,4 @@
-import 'dart:nativewrappers/_internal/vm/lib/developer.dart';
+import 'dart:developer';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
@@ -18,18 +18,31 @@ Future<void> _configureMacosWindowUtils() async {
 }
 
 Future<void> main() async {
-  // Creates a store
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Creates a store for caching
   final store = await newMemoryCacheStore();
-  // Creates a cache
+
+  // Creates a cache with custom configuration
   final cache = await store.cache(
-      eventListenerMode: EventListenerMode.synchronous)
+    name: 'manga_cache',
+    eventListenerMode: EventListenerMode.synchronous,
+    maxEntries: 1000,
+    expiryPolicy: const AccessedExpiryPolicy(Duration(hours: 2)),
+  )
     ..on<CacheEntryCreatedEvent>()
         .listen((event) => log('Key "${event.entry.key}" added to the cache'));
 
-  // Configures a a dio client
-  final dio = Dio(BaseOptions(baseUrl: 'https://api.mangadex.dev'))
+  // Configure Dio client with cache interceptor
+  final dio = Dio(BaseOptions(
+    baseUrl: 'https://api.mangadex.org/',
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 10),
+  ))
     ..interceptors.addAll([
-      cache.interceptor('*'),
+      // Cache interceptor with wildcard pattern (caches all requests)
+      cache.interceptor('/manga*'),
+      cache.interceptor('/cover*'),
       LogInterceptor(
         requestHeader: false,
         requestBody: false,
@@ -39,12 +52,15 @@ Future<void> main() async {
     ]);
 
   await _configureMacosWindowUtils();
-  MultiProvider(
-    providers: [
-      Provider<Dio>(create: (context) => dio),
-      Provider<Cache>(create: (context) => cache),
-    ],
-    child: const App(),
+
+  runApp(
+    MultiProvider(
+      providers: [
+        Provider<Dio>(create: (context) => dio),
+        Provider<Cache>(create: (context) => cache),
+      ],
+      child: const App(),
+    ),
   );
 }
 
