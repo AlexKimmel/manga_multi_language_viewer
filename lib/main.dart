@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:macos_ui/macos_ui.dart';
 import 'package:manga_muli_language_viewer/screens/discover_page.dart';
 import 'package:manga_muli_language_viewer/screens/reader_page.dart';
+import 'package:manga_muli_language_viewer/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:stash/stash_api.dart';
 import 'package:stash_dio/stash_dio.dart';
@@ -58,6 +59,9 @@ Future<void> main() async {
       providers: [
         Provider<Dio>(create: (context) => dio),
         Provider<Cache>(create: (context) => cache),
+        ChangeNotifierProvider<SettingsProvider>(
+          create: (context) => SettingsProvider(),
+        ),
       ],
       child: const App(),
     ),

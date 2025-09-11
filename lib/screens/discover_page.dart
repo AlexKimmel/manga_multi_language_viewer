@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/manga.dart';
 import '../services/mangadx_service.dart';
 import '../widget/discover/manga_card.dart';
+import 'package:manga_muli_language_viewer/screens/manga_info_page.dart';
 
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
@@ -55,8 +58,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
     final currentPixels = position.pixels;
 
     // More aggressive loading triggers for better UX
-    final triggerDistance = 600.0; // Increased from 400 to be more proactive
-    final triggerPercentage = 0.75; // Reduced from 0.8 to trigger earlier
+    const triggerDistance = 600.0; // Increased from 400 to be more proactive
+    const triggerPercentage = 0.75; // Reduced from 0.8 to trigger earlier
 
     final isNearBottom = currentPixels >= (maxScrollExtent - triggerDistance);
     final isPastThreshold = maxScrollExtent > 0 &&
@@ -179,7 +182,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
           _isLoadingMore = false;
         });
         // Don't show error dialog for load more failures to avoid interrupting UX
-        print('Failed to load more manga: $e');
+        log('Failed to load more manga: $e');
       }
     }
   }
@@ -206,30 +209,27 @@ class _DiscoverPageState extends State<DiscoverPage> {
       builder: (context) {
         return MacosScaffold(
           toolBar: ToolBar(
+            enableBlur: true,
+            allowWallpaperTintingOverrides: true,
             leading: MacosTooltip(
               message: 'Toggle Sidebar',
               useMousePosition: false,
-              child: Column(
-                children: [
-                  MacosIconButton(
-                    icon: MacosIcon(
-                      CupertinoIcons.sidebar_left,
-                      color: MacosTheme.brightnessOf(context).resolve(
-                        const Color.fromRGBO(0, 0, 0, 0.5),
-                        const Color.fromRGBO(255, 255, 255, 0.5),
-                      ),
-                      size: 20.0,
-                    ),
-                    boxConstraints: const BoxConstraints(
-                      minHeight: 20,
-                      minWidth: 20,
-                      maxWidth: 48,
-                      maxHeight: 38,
-                    ),
-                    onPressed: () =>
-                        MacosWindowScope.of(context).toggleSidebar(),
+              child: MacosIconButton(
+                icon: MacosIcon(
+                  CupertinoIcons.sidebar_left,
+                  color: MacosTheme.brightnessOf(context).resolve(
+                    const Color.fromRGBO(0, 0, 0, 0.5),
+                    const Color.fromRGBO(255, 255, 255, 0.5),
                   ),
-                ],
+                  size: 20.0,
+                ),
+                boxConstraints: const BoxConstraints(
+                  minHeight: 20,
+                  minWidth: 20,
+                  maxWidth: 48,
+                  maxHeight: 38,
+                ),
+                onPressed: () => MacosWindowScope.of(context).toggleSidebar(),
               ),
             ),
             title: const Text('Discover'),
@@ -369,8 +369,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     manga: _mangas[index],
                     mangaDexService: _mangaDexService,
                     onTap: () {
-                      // TODO: Navigate to manga details
-                      print('Tapped on: ${_mangas[index].title}');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              MangaInfoPage(manga: _mangas[index]),
+                        ),
+                      );
                     },
                   );
                 }

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/manga.dart';
+import '../models/chapter.dart';
 
 class MangaDexService {
   static const String baseUrl = 'https://api.mangadex.org';
@@ -13,7 +14,7 @@ class MangaDexService {
     required String query,
     int limit = 24,
     int offset = 0,
-    List<String> contentRatings = const ['safe', 'suggestive'],
+    List<String> contentRatings = const ['safe'],
     List<String> includes = const ['cover_art'],
     bool loadCoversImmediately = false,
   }) async {
@@ -150,6 +151,119 @@ class MangaDexService {
       );
     } catch (e) {
       return manga; // Return original if cover fetch fails
+    }
+  }
+
+  /// Fetch chapters for a specific manga
+  Future<ChapterResponse> getMangaChapters({
+    required String mangaId,
+    List<String> translatedLanguages = const ['en'],
+    int limit = 100,
+    int offset = 0,
+    Map<String, String> order = const {'chapter': 'asc'},
+  }) async {
+    try {
+      final Map<String, dynamic> params = {
+        'manga': mangaId,
+        'limit': limit,
+        'offset': offset,
+        'translatedLanguage[]': translatedLanguages,
+        'order[chapter]': order['chapter'] ?? 'asc',
+        'order[volume]': order['volume'] ?? 'asc',
+        'includes[]': ['scanlation_group'],
+      };
+
+      final response = await _dio.get(
+        '$baseUrl/chapter',
+        queryParameters: params,
+      );
+
+      if (response.statusCode == 200) {
+        return ChapterResponse.fromJson(response.data);
+      } else {
+        throw Exception(
+            'Failed to load chapters: ${response.statusCode} ${response.statusMessage}');
+      }
+    } on DioException catch (e) {
+      final detail = e.response?.data ?? e.message;
+      throw Exception('Network error: $detail');
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  /// Get available languages for a manga
+  Future<List<String>> getMangaAvailableLanguages(String mangaId) async {
+    try {
+      final response = await _dio.get(
+        '$baseUrl/chapter',
+        queryParameters: {
+          'manga': mangaId,
+          'limit': 0, // We only want the total count and available languages
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data['data'] as List<dynamic>? ?? [];
+        final languages = <String>{};
+
+        for (final chapter in data) {
+          final attributes =
+              chapter['attributes'] as Map<String, dynamic>? ?? {};
+          final translatedLanguage =
+              attributes['translatedLanguage'] as String?;
+          if (translatedLanguage != null) {
+            languages.add(translatedLanguage);
+          }
+        }
+
+        return languages.toList()..sort();
+      } else {
+        throw Exception('Failed to load available languages');
+      }
+    } on DioException catch (e) {
+      final detail = e.response?.data ?? e.message;
+      throw Exception('Network error: $detail');
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
+
+  /// Get detailed manga information including all available descriptions
+  Future<Manga> getMangaDetails(String mangaId) async {
+    try {
+      final response = await _dio.get(
+        '$baseUrl/manga/$mangaId',
+        queryParameters: {
+          'includes[]': ['cover_art', 'author', 'artist'],
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data['data'] as Map<String, dynamic>;
+        final manga = Manga.fromJson(data);
+
+        // Load cover image
+        final coverUrl = await _getCoverImageUrl(mangaId);
+
+        return Manga(
+          id: manga.id,
+          title: manga.title,
+          description: manga.description,
+          tags: manga.tags,
+          coverImageUrl: coverUrl,
+          status: manga.status,
+          year: manga.year,
+          author: manga.author,
+        );
+      } else {
+        throw Exception('Failed to load manga details');
+      }
+    } on DioException catch (e) {
+      final detail = e.response?.data ?? e.message;
+      throw Exception('Network error: $detail');
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
     }
   }
 }
