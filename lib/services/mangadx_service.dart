@@ -164,7 +164,6 @@ class MangaDexService {
   }) async {
     try {
       final Map<String, dynamic> params = {
-        'manga': mangaId,
         'limit': limit,
         'offset': offset,
         'translatedLanguage[]': translatedLanguages,
@@ -173,8 +172,9 @@ class MangaDexService {
         'includes[]': ['scanlation_group'],
       };
 
+      // Use the recommended feed endpoint for a manga's chapters
       final response = await _dio.get(
-        '$baseUrl/chapter',
+        '$baseUrl/manga/$mangaId/feed',
         queryParameters: params,
       );
 
@@ -195,29 +195,19 @@ class MangaDexService {
   /// Get available languages for a manga
   Future<List<String>> getMangaAvailableLanguages(String mangaId) async {
     try {
-      final response = await _dio.get(
-        '$baseUrl/chapter',
-        queryParameters: {
-          'manga': mangaId,
-          'limit': 0, // We only want the total count and available languages
-        },
-      );
+      // Read from manga details attributes.availableTranslatedLanguages
+      final response = await _dio.get('$baseUrl/manga/$mangaId');
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] as List<dynamic>? ?? [];
-        final languages = <String>{};
-
-        for (final chapter in data) {
-          final attributes =
-              chapter['attributes'] as Map<String, dynamic>? ?? {};
-          final translatedLanguage =
-              attributes['translatedLanguage'] as String?;
-          if (translatedLanguage != null) {
-            languages.add(translatedLanguage);
-          }
-        }
-
-        return languages.toList()..sort();
+        final attrs =
+            (response.data['data']?['attributes'] as Map<String, dynamic>? ??
+                const {});
+        final langs =
+            (attrs['availableTranslatedLanguages'] as List<dynamic>? ??
+                    const [])
+                .cast<String>();
+        final sorted = [...langs]..sort();
+        return sorted;
       } else {
         throw Exception('Failed to load available languages');
       }

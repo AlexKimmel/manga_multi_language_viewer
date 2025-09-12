@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:macos_ui/macos_ui.dart';
+import 'package:manga_muli_language_viewer/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/manga.dart';
 import '../services/mangadx_service.dart';
@@ -128,11 +129,11 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     try {
       final response = await _mangaDexService.searchManga(
-        query: _currentSearchTerm.toString(),
-        limit: _pageSize,
-        offset: 0,
-        loadCoversImmediately: false, // Load covers asynchronously
-      );
+          query: _currentSearchTerm.toString(),
+          limit: _pageSize,
+          offset: 0,
+          loadCoversImmediately: false, // Load covers asynchronously
+          contentRatings: context.read()<SettingsProvider>().searchSettings);
 
       setState(() {
         _mangas = response.data;
@@ -232,6 +233,85 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 onPressed: () => MacosWindowScope.of(context).toggleSidebar(),
               ),
             ),
+            actions: [
+              
+
+
+              ToolBarPullDownButton(
+                  label: 'Search Settings',
+                  icon: CupertinoIcons.settings,
+                  items: [
+                    MacosPulldownMenuItem(
+                      title: Row(
+                        children: [
+                          MacosCheckbox(
+                              value: context
+                                  .read<SettingsProvider>()
+                                  .searchSettings
+                                  .contains('safe'),
+                              onChanged: (value) {}),
+                          const SizedBox(
+                            width: 4,
+                          ),
+                          const Text('safe'),
+                        ],
+                      ),
+                      onTap: () {
+                        setState(() {
+                          context
+                              .read<SettingsProvider>()
+                              .updateSearchsettings('safe');
+                        });
+                      },
+                    ),
+                    MacosPulldownMenuItem(
+                      title: Row(
+                        children: [
+                          MacosCheckbox(
+                              value: context
+                                  .read<SettingsProvider>()
+                                  .searchSettings
+                                  .contains('suggestive'),
+                              onChanged: (value) {}),
+                          const SizedBox(
+                            width: 4,
+                          ),
+                          const Text('suggestive'),
+                        ],
+                      ),
+                      onTap: () {
+                        setState(() {
+                          context
+                              .read<SettingsProvider>()
+                              .updateSearchsettings('suggestive');
+                        });
+                      },
+                    ),
+                    MacosPulldownMenuItem(
+                      title: Row(
+                        children: [
+                          MacosCheckbox(
+                              value: context
+                                  .read<SettingsProvider>()
+                                  .searchSettings
+                                  .contains('erotica'),
+                              onChanged: (value) {}),
+                          const SizedBox(
+                            width: 4,
+                          ),
+                          const Text('erotica'),
+                        ],
+                      ),
+                      onTap: () {
+                        setState(() {
+                          context
+                              .read<SettingsProvider>()
+                              .updateSearchsettings('erotica');
+                        });
+                      },
+                    ),
+                  ])
+            ],
             title: const Text('Discover'),
           ),
           children: [
@@ -241,7 +321,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                   children: [
                     // Search Bar
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(8),
                       child: Container(
                         decoration: BoxDecoration(
                           color: MacosTheme.brightnessOf(context).resolve(
@@ -282,7 +362,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                               ),
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: 12,
                                 vertical: 12,
                               ),
                             ),
@@ -296,7 +376,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
                         ),
                       ),
                     ),
-
                     // Content
                     Expanded(
                       child: _buildContent(),

@@ -22,13 +22,11 @@ class MangaInfoPage extends StatefulWidget {
 
 class _MangaInfoPageState extends State<MangaInfoPage> {
   late MangaDexService _mangaDexService;
-  
+
   Manga? _detailedManga;
   List<Chapter> _chapters = [];
   List<String> _availableLanguages = [];
-  bool _isLoadingDetails = true;
   bool _isLoadingChapters = true;
-  bool _isLoadingLanguages = true;
   String? _errorMessage;
 
   @override
@@ -43,7 +41,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
       _loadMangaDetails(),
       _loadAvailableLanguages(),
     ]);
-    
+
     // Load chapters after we know the available languages
     await _loadChapters();
   }
@@ -54,14 +52,12 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
       if (mounted) {
         setState(() {
           _detailedManga = details;
-          _isLoadingDetails = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _errorMessage = 'Failed to load manga details: $e';
-          _isLoadingDetails = false;
         });
       }
     }
@@ -69,53 +65,88 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
 
   Future<void> _loadAvailableLanguages() async {
     try {
-      final languages = await _mangaDexService.getMangaAvailableLanguages(widget.manga.id);
+      final languages =
+          await _mangaDexService.getMangaAvailableLanguages(widget.manga.id);
       if (mounted) {
         setState(() {
           _availableLanguages = languages;
-          _isLoadingLanguages = false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoadingLanguages = false;
-        });
-      }
+      // ignore
     }
   }
 
   Future<void> _loadChapters() async {
     try {
+      setState(() {
+        _isLoadingChapters = true;
+        _chapters = [];
+      });
       final settings = context.read<SettingsProvider>();
-      final preferredLanguages = settings.preferredLanguages
-          .where((lang) => _availableLanguages.contains(lang))
-          .toList();
-      
-      // If no preferred languages are available, use the first available language
-      final languagesToLoad = preferredLanguages.isNotEmpty 
-          ? preferredLanguages 
-          : _availableLanguages.take(1).toList();
+      final primary = settings.primaryLanguage;
+      final secondary = settings.secondaryLanguage;
 
-      if (languagesToLoad.isNotEmpty) {
-        final chaptersResponse = await _mangaDexService.getMangaChapters(
+      // If the same language is selected twice, just fetch once
+      if (primary == secondary) {
+        final single = await _mangaDexService.getMangaChapters(
           mangaId: widget.manga.id,
-          translatedLanguages: languagesToLoad,
-          limit: 500, // Load many chapters
+          translatedLanguages: [primary],
+          limit: 500,
         );
-        
         if (mounted) {
           setState(() {
-            _chapters = chaptersResponse.data;
+            _chapters = single.data;
             _isLoadingChapters = false;
           });
         }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoadingChapters = false;
-          });
+        return;
+      }
+
+      // Fetch both languages completely (paged) and intersect by normalized chapter number
+      final results = await Future.wait<List<Chapter>>([
+        _fetchAllChaptersForLanguage(primary),
+        _fetchAllChaptersForLanguage(secondary),
+      ]);
+
+      final primaryChapters = results[0];
+      final secondaryChapters = results[1];
+
+      final Map<String, Chapter> primaryByKey = {};
+      for (final c in primaryChapters) {
+        final key = _normalizedChapterKey(c);
+        if (key != null && !primaryByKey.containsKey(key)) {
+          primaryByKey[key] = c;
         }
+      }
+
+      final Map<String, Chapter> secondaryByKey = {};
+      for (final c in secondaryChapters) {
+        final key = _normalizedChapterKey(c);
+        if (key != null && !secondaryByKey.containsKey(key)) {
+          secondaryByKey[key] = c;
+        }
+      }
+
+      final keys = primaryByKey.keys
+          .toSet()
+          .intersection(secondaryByKey.keys.toSet())
+          .toList()
+        ..sort((a, b) => _chapterSortValue(a).compareTo(_chapterSortValue(b)));
+
+      // Flatten interleaved: primary then secondary for each chapter key
+      final matched = <Chapter>[];
+      for (final k in keys) {
+        matched
+          ..add(primaryByKey[k]!)
+          ..add(secondaryByKey[k]!);
+      }
+
+      if (mounted) {
+        setState(() {
+          _chapters = matched;
+          _isLoadingChapters = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -127,11 +158,59 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
     }
   }
 
+  // Fetch all chapters for a language with pagination (up to ~1000 for safety)
+  Future<List<Chapter>> _fetchAllChaptersForLanguage(String lang) async {
+    const pageSize = 100; // MangaDex caps per page at 100
+    int offset = 0;
+    final List<Chapter> all = [];
+    for (int i = 0; i < 10; i++) {
+      // hard cap 10 pages -> 1000 items
+      final resp = await _mangaDexService.getMangaChapters(
+        mangaId: widget.manga.id,
+        translatedLanguages: [lang],
+        limit: pageSize,
+        offset: offset,
+        order: const {'chapter': 'asc'},
+      );
+      all.addAll(resp.data);
+      if (resp.data.length < pageSize) break;
+      offset += pageSize;
+    }
+    return all;
+  }
+
+  // Normalize to canonical key: take numeric prefix if present (e.g., '5a' -> '5', '10.0' -> '10'), else use raw lowercased.
+  String? _normalizedChapterKey(Chapter c) {
+    final raw = c.chapterNumber?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final match = RegExp(r'^[0-9]+(?:\.[0-9]+)?').firstMatch(raw);
+    if (match != null) {
+      final numStr = match.group(0)!;
+      final n = double.tryParse(numStr);
+      if (n != null) {
+        final fixed = n.toStringAsFixed(6);
+        return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+      }
+      return numStr;
+    }
+    return raw.toLowerCase();
+  }
+
+  num _chapterSortValue(String key) {
+    final match = RegExp(r'^[0-9]+(?:\.[0-9]+)?').firstMatch(key);
+    if (match != null) {
+      final n = double.tryParse(match.group(0)!);
+      if (n != null) return n;
+    }
+    return double.infinity;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MacosScaffold(
       toolBar: ToolBar(
-        title: Text(_detailedManga?.title ?? widget.manga.title),
+        title: Text(_detailedManga?.title ?? widget.manga.title,
+            style: const TextStyle(overflow: TextOverflow.ellipsis)),
         leading: MacosTooltip(
           message: 'Back',
           useMousePosition: false,
@@ -171,9 +250,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                       onPressed: () {
                         setState(() {
                           _errorMessage = null;
-                          _isLoadingDetails = true;
                           _isLoadingChapters = true;
-                          _isLoadingLanguages = true;
                         });
                         _loadMangaInfo();
                       },
@@ -191,22 +268,22 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                 SliverToBoxAdapter(
                   child: _buildHeader(),
                 ),
-                
+
                 // Language Settings
                 SliverToBoxAdapter(
                   child: _buildLanguageSettings(),
                 ),
-                
+
                 // Description
                 SliverToBoxAdapter(
                   child: _buildDescription(),
                 ),
-                
+
                 // Tags
                 SliverToBoxAdapter(
                   child: _buildTags(),
                 ),
-                
+
                 // Chapters List
                 SliverToBoxAdapter(
                   child: _buildChaptersSection(),
@@ -221,7 +298,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
 
   Widget _buildHeader() {
     final manga = _detailedManga ?? widget.manga;
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       child: Row(
@@ -269,9 +346,9 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   : _buildCoverPlaceholder(),
             ),
           ),
-          
+
           const SizedBox(width: 24),
-          
+
           // Manga Info
           Expanded(
             child: Column(
@@ -283,9 +360,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                         fontWeight: FontWeight.bold,
                       ),
                 ),
-                
                 const SizedBox(height: 8),
-                
                 if (manga.author != null) ...[
                   Text(
                     'By ${manga.author}',
@@ -298,7 +373,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                
                 Row(
                   children: [
                     _buildInfoChip('Status', manga.status),
@@ -307,9 +381,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                       _buildInfoChip('Year', manga.year.toString()),
                   ],
                 ),
-                
                 const SizedBox(height: 16),
-                
                 if (_availableLanguages.isNotEmpty) ...[
                   Text(
                     'Available Languages',
@@ -333,19 +405,9 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                           ),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              langInfo?.flag ?? '🌐',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              langInfo?.name ?? lang.toUpperCase(),
-                              style: MacosTheme.of(context).typography.caption1,
-                            ),
-                          ],
+                        child: Text(
+                          langInfo?.name ?? lang.toUpperCase(),
+                          style: MacosTheme.of(context).typography.caption1,
                         ),
                       );
                     }).toList(),
@@ -354,12 +416,13 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                     const SizedBox(height: 4),
                     Text(
                       '+${_availableLanguages.length - 6} more languages',
-                      style: MacosTheme.of(context).typography.caption1.copyWith(
-                            color: MacosTheme.brightnessOf(context).resolve(
-                              const Color(0xFF8E8E93),
-                              const Color(0xFF636366),
-                            ),
-                          ),
+                      style:
+                          MacosTheme.of(context).typography.caption1.copyWith(
+                                color: MacosTheme.brightnessOf(context).resolve(
+                                  const Color(0xFF8E8E93),
+                                  const Color(0xFF636366),
+                                ),
+                              ),
                     ),
                   ],
                 ],
@@ -448,7 +511,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                 style: MacosTheme.of(context).typography.headline,
               ),
               const SizedBox(height: 12),
-              
               Row(
                 children: [
                   Expanded(
@@ -473,9 +535,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                       ],
                     ),
                   ),
-                  
                   const SizedBox(width: 16),
-                  
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,8 +573,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
         value: lang.code,
         child: Row(
           children: [
-            Text(lang.flag, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 8),
             Text(lang.name),
           ],
         ),
@@ -524,7 +582,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
 
   Widget _buildDescription() {
     final manga = _detailedManga ?? widget.manga;
-    
+
     if (manga.description == null || manga.description!.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -550,7 +608,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
 
   Widget _buildTags() {
     final manga = _detailedManga ?? widget.manga;
-    
+
     if (manga.tags.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -622,7 +680,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
             ],
           ),
           const SizedBox(height: 16),
-          
           if (_isLoadingChapters)
             const Center(
               child: Padding(
@@ -648,9 +705,10 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                     ),
                     Text(
                       'Try selecting different languages',
-                      style: MacosTheme.of(context).typography.caption1.copyWith(
-                            color: const Color(0xFF8E8E93),
-                          ),
+                      style:
+                          MacosTheme.of(context).typography.caption1.copyWith(
+                                color: const Color(0xFF8E8E93),
+                              ),
                     ),
                   ],
                 ),
@@ -726,7 +784,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   ],
                 ),
               ),
-              
+
               // Chapters list (show first 10)
               ListView.separated(
                 shrinkWrap: true,
@@ -757,30 +815,33 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                                 width: 60,
                                 child: Text(
                                   'Ch. ${chapter.chapterNumber}',
-                                  style: MacosTheme.of(context).typography.caption1.copyWith(
+                                  style: MacosTheme.of(context)
+                                      .typography
+                                      .caption1
+                                      .copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: CupertinoColors.systemBlue,
                                       ),
                                 ),
                               ),
-                            
                             Expanded(
                               child: Text(
-                                chapter.title.isNotEmpty 
-                                    ? chapter.title 
+                                chapter.title.isNotEmpty
+                                    ? chapter.title
                                     : 'Chapter ${chapter.chapterNumber ?? 'Unknown'}',
                                 style: MacosTheme.of(context).typography.body,
                               ),
                             ),
-                            
                             if (chapter.pages > 0)
                               Text(
                                 '${chapter.pages} pages',
-                                style: MacosTheme.of(context).typography.caption1.copyWith(
+                                style: MacosTheme.of(context)
+                                    .typography
+                                    .caption1
+                                    .copyWith(
                                       color: const Color(0xFF8E8E93),
                                     ),
                               ),
-                            
                             const SizedBox(width: 8),
                             const MacosIcon(
                               CupertinoIcons.chevron_right,
@@ -794,7 +855,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   );
                 },
               ),
-              
+
               // Show more button if there are more chapters
               if (chapters.length > 10)
                 Container(
@@ -803,7 +864,8 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                     controlSize: ControlSize.small,
                     onPressed: () {
                       // TODO: Show all chapters in a separate view
-                      print('Show all ${chapters.length} chapters for $language');
+                      print(
+                          'Show all ${chapters.length} chapters for $language');
                     },
                     child: Text('Show ${chapters.length - 10} more chapters'),
                   ),
