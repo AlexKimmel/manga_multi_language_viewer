@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:macos_ui/macos_ui.dart';
+import 'package:manga_muli_language_viewer/models/chapter.dart';
 import 'package:manga_muli_language_viewer/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/manga.dart';
@@ -98,10 +99,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
         limit: _pageSize,
         offset: 0,
         loadCoversImmediately: false, // Load covers asynchronously
+        availableTranslatedLanguages:
+            context.read<SettingsProvider>().preferredLanguages,
       );
 
       setState(() {
-        _mangas = response.data;
+        _mangas = _filterBySelectedLanguages(response.data);
         _currentOffset = _pageSize;
         _hasMore = response.data.length >= _pageSize;
         _isLoading = false;
@@ -129,14 +132,17 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     try {
       final response = await _mangaDexService.searchManga(
-          query: _currentSearchTerm.toString(),
-          limit: _pageSize,
-          offset: 0,
-          loadCoversImmediately: false, // Load covers asynchronously
-          contentRatings: context.read()<SettingsProvider>().searchSettings);
+        query: _currentSearchTerm.toString(),
+        limit: _pageSize,
+        offset: 0,
+        loadCoversImmediately: false, // Load covers asynchronously
+        contentRatings: context.read<SettingsProvider>().searchSettings,
+        availableTranslatedLanguages:
+            context.read<SettingsProvider>().preferredLanguages,
+      );
 
       setState(() {
-        _mangas = response.data;
+        _mangas = _filterBySelectedLanguages(response.data);
         _currentOffset = _pageSize;
         _hasMore = response.data.length >= _pageSize;
         _isLoading = false;
@@ -166,11 +172,15 @@ class _DiscoverPageState extends State<DiscoverPage> {
         limit: _pageSize,
         offset: _currentOffset,
         loadCoversImmediately: false, // Load covers asynchronously
+        contentRatings: context.read<SettingsProvider>().searchSettings,
+        availableTranslatedLanguages:
+            context.read<SettingsProvider>().preferredLanguages,
       );
 
       if (mounted) {
         setState(() {
-          _mangas.addAll(response.data);
+          final filtered = _filterBySelectedLanguages(response.data);
+          _mangas.addAll(filtered);
           _currentOffset +=
               response.data.length; // Use actual length instead of _pageSize
           _hasMore = response.data.length >= _pageSize;
@@ -186,6 +196,25 @@ class _DiscoverPageState extends State<DiscoverPage> {
         log('Failed to load more manga: $e');
       }
     }
+  }
+
+  List<Manga> _filterBySelectedLanguages(List<Manga> list) {
+    final settings = context.read<SettingsProvider>();
+    final primary = settings.primaryLanguage;
+    final secondary = settings.secondaryLanguage;
+
+    // If both are same, require that one language only
+    if (primary == secondary) {
+      return list
+          .where((m) => m.availableTranslatedLanguages.contains(primary))
+          .toList();
+    }
+
+    return list
+        .where((m) =>
+            m.availableTranslatedLanguages.contains(primary) &&
+            m.availableTranslatedLanguages.contains(secondary))
+        .toList();
   }
 
   void _showErrorDialog(String message) {
@@ -234,147 +263,154 @@ class _DiscoverPageState extends State<DiscoverPage> {
               ),
             ),
             actions: [
-              
-
-
               ToolBarPullDownButton(
-                  label: 'Search Settings',
-                  icon: CupertinoIcons.settings,
-                  items: [
-                    MacosPulldownMenuItem(
-                      title: Row(
-                        children: [
-                          MacosCheckbox(
-                              value: context
-                                  .read<SettingsProvider>()
-                                  .searchSettings
-                                  .contains('safe'),
-                              onChanged: (value) {}),
-                          const SizedBox(
-                            width: 4,
-                          ),
-                          const Text('safe'),
-                        ],
-                      ),
-                      onTap: () {
-                        setState(() {
-                          context
-                              .read<SettingsProvider>()
-                              .updateSearchsettings('safe');
-                        });
-                      },
+                label: 'Search Settings',
+                icon: CupertinoIcons.settings,
+                items: [
+                  MacosPulldownMenuItem(
+                    title: Row(
+                      children: [
+                        MacosCheckbox(
+                            value: context
+                                .read<SettingsProvider>()
+                                .searchSettings
+                                .contains('safe'),
+                            onChanged: (value) {}),
+                        const SizedBox(
+                          width: 4,
+                        ),
+                        const Text('safe'),
+                      ],
                     ),
-                    MacosPulldownMenuItem(
-                      title: Row(
-                        children: [
-                          MacosCheckbox(
-                              value: context
-                                  .read<SettingsProvider>()
-                                  .searchSettings
-                                  .contains('suggestive'),
-                              onChanged: (value) {}),
-                          const SizedBox(
-                            width: 4,
-                          ),
-                          const Text('suggestive'),
-                        ],
-                      ),
-                      onTap: () {
-                        setState(() {
-                          context
-                              .read<SettingsProvider>()
-                              .updateSearchsettings('suggestive');
-                        });
-                      },
+                    onTap: () {
+                      setState(() {
+                        context
+                            .read<SettingsProvider>()
+                            .updateSearchsettings('safe');
+                      });
+                    },
+                  ),
+                  MacosPulldownMenuItem(
+                    title: Row(
+                      children: [
+                        MacosCheckbox(
+                            value: context
+                                .read<SettingsProvider>()
+                                .searchSettings
+                                .contains('suggestive'),
+                            onChanged: (value) {}),
+                        const SizedBox(
+                          width: 4,
+                        ),
+                        const Text('suggestive'),
+                      ],
                     ),
-                    MacosPulldownMenuItem(
-                      title: Row(
-                        children: [
-                          MacosCheckbox(
-                              value: context
-                                  .read<SettingsProvider>()
-                                  .searchSettings
-                                  .contains('erotica'),
-                              onChanged: (value) {}),
-                          const SizedBox(
-                            width: 4,
-                          ),
-                          const Text('erotica'),
-                        ],
-                      ),
-                      onTap: () {
-                        setState(() {
-                          context
-                              .read<SettingsProvider>()
-                              .updateSearchsettings('erotica');
-                        });
-                      },
+                    onTap: () {
+                      setState(() {
+                        context
+                            .read<SettingsProvider>()
+                            .updateSearchsettings('suggestive');
+                      });
+                    },
+                  ),
+                  MacosPulldownMenuItem(
+                    title: Row(
+                      children: [
+                        MacosCheckbox(
+                            value: context
+                                .read<SettingsProvider>()
+                                .searchSettings
+                                .contains('erotica'),
+                            onChanged: (value) {}),
+                        const SizedBox(
+                          width: 4,
+                        ),
+                        const Text('erotica'),
+                      ],
                     ),
-                  ])
+                    onTap: () {
+                      setState(() {
+                        context
+                            .read<SettingsProvider>()
+                            .updateSearchsettings('erotica');
+                      });
+                    },
+                  ),
+                ],
+              )
             ],
             title: const Text('Discover'),
           ),
           children: [
             ContentArea(
               builder: (context, scrollController) {
+                final settings = context.watch<SettingsProvider>();
                 return Column(
                   children: [
-                    // Search Bar
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: MacosTheme.brightnessOf(context).resolve(
-                            const Color(0xFFF2F2F7),
-                            const Color(0xFF2C2C2E),
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: MacosTheme.brightnessOf(context).resolve(
-                              const Color(0xFFD1D1D6),
-                              const Color(0xFF38383A),
+                    Row(
+                      children: [
+                        // Search Bar
+                        Expanded(
+                          flex: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: MacosTextField(
+                              prefix: const Icon(CupertinoIcons.search),
+                              controller: _searchController,
+                              onChanged: (value) {
+                                if (value.isEmpty) {
+                                  _loadPopularManga();
+                                } else {
+                                  _searchManga(value);
+                                }
+                              },
                             ),
                           ),
                         ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: TextField(
-                            controller: _searchController,
-                            style: MacosTheme.of(context).typography.body,
-                            decoration: InputDecoration(
-                              hintText: 'Search manga...',
-                              hintStyle: MacosTheme.of(context)
-                                  .typography
-                                  .body
-                                  .copyWith(
-                                    color: MacosTheme.brightnessOf(context)
-                                        .resolve(
-                                      const Color(0xFF8E8E93),
-                                      const Color(0xFF636366),
-                                    ),
-                                  ),
-                              prefixIcon: Icon(
-                                CupertinoIcons.search,
-                                color: MacosTheme.brightnessOf(context).resolve(
-                                  const Color(0xFF8E8E93),
-                                  const Color(0xFF636366),
-                                ),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
+                        // primary langauge
+
+                        // secondary language
+                        Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(2.0),
+                              child: MacosPopupButton<String>(
+                                value: settings.primaryLanguage,
+                                items: _buildLanguageMenuItems(),
+                                onChanged: (String? newValue) {
+                                  if (newValue != null) {
+                                    settings.setPrimaryLanguage(newValue);
+                                    final term = _searchController.text;
+                                    if (term.isNotEmpty) {
+                                      _searchManga(term);
+                                    } else {
+                                      _loadPopularManga();
+                                    }
+                                  }
+                                },
                               ),
                             ),
-                            onSubmitted: _searchManga,
-                            onChanged: (value) {
-                              if (value.isEmpty) {
-                                _loadPopularManga();
-                              }
-                            },
-                          ),
+                            Padding(
+                              padding: const EdgeInsets.all(2.0),
+                              child: MacosPopupButton<String>(
+                                value: settings.secondaryLanguage,
+                                items: _buildLanguageMenuItems(),
+                                onChanged: (String? newValue) {
+                                  if (newValue != null) {
+                                    settings.setSecondaryLanguage(newValue);
+                                    final term = _searchController.text;
+                                    if (term.isNotEmpty) {
+                                      _searchManga(term);
+                                    } else {
+                                      _loadPopularManga();
+                                    }
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ],
                     ),
                     // Content
                     Expanded(
@@ -388,6 +424,15 @@ class _DiscoverPageState extends State<DiscoverPage> {
         );
       },
     );
+  }
+
+  List<MacosPopupMenuItem<String>> _buildLanguageMenuItems() {
+    return SupportedLanguages.languages.map((lang) {
+      return MacosPopupMenuItem<String>(
+        value: lang.code,
+        child: Text(lang.name),
+      );
+    }).toList();
   }
 
   Widget _buildContent() {

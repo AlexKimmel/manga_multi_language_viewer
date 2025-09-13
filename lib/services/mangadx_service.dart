@@ -15,6 +15,7 @@ class MangaDexService {
     int limit = 24,
     int offset = 0,
     List<String> contentRatings = const ['safe'],
+    List<String>? availableTranslatedLanguages,
     List<String> includes = const ['cover_art'],
     bool loadCoversImmediately = false,
   }) async {
@@ -27,6 +28,9 @@ class MangaDexService {
         'offset': offset,
         'contentRating[]': contentRatings, // <— List
         'includes[]': includes, // <— List (e.g. ['cover_art'])
+        if (availableTranslatedLanguages != null &&
+            availableTranslatedLanguages.isNotEmpty)
+          'availableTranslatedLanguage[]': availableTranslatedLanguages,
       };
 
       // Use absolute URL unless your Dio has BaseOptions(baseUrl: MangaDexService.baseUrl).
@@ -71,6 +75,7 @@ class MangaDexService {
           title: manga.title,
           description: manga.description,
           tags: manga.tags,
+          availableTranslatedLanguages: manga.availableTranslatedLanguages,
           coverImageUrl: coverUrl,
           status: manga.status,
           year: manga.year,
@@ -122,13 +127,14 @@ class MangaDexService {
     int limit = 20,
     int offset = 0,
     bool loadCoversImmediately = false,
+    List<String>? availableTranslatedLanguages,
   }) async {
     return searchManga(
-      query: '',
-      limit: limit,
-      offset: offset,
-      loadCoversImmediately: loadCoversImmediately,
-    );
+        query: '',
+        limit: limit,
+        offset: offset,
+        loadCoversImmediately: loadCoversImmediately,
+        availableTranslatedLanguages: availableTranslatedLanguages);
   }
 
   /// Load cover image for a single manga asynchronously
@@ -144,6 +150,7 @@ class MangaDexService {
         title: manga.title,
         description: manga.description,
         tags: manga.tags,
+        availableTranslatedLanguages: manga.availableTranslatedLanguages,
         coverImageUrl: coverUrl,
         status: manga.status,
         year: manga.year,
@@ -241,6 +248,7 @@ class MangaDexService {
           title: manga.title,
           description: manga.description,
           tags: manga.tags,
+          availableTranslatedLanguages: manga.availableTranslatedLanguages,
           coverImageUrl: coverUrl,
           status: manga.status,
           year: manga.year,

@@ -3,6 +3,7 @@ class Manga {
   final String title;
   final String? description;
   final List<String> tags;
+  final List<String> availableTranslatedLanguages;
   final String? coverImageUrl;
   final String status;
   final int? year;
@@ -13,6 +14,7 @@ class Manga {
     required this.title,
     this.description,
     required this.tags,
+    this.availableTranslatedLanguages = const [],
     this.coverImageUrl,
     required this.status,
     this.year,
@@ -38,11 +40,18 @@ class Manga {
         .where((name) => name.isNotEmpty)
         .toList();
 
+    // Extract available translated languages if present
+    final langs =
+        (attributes['availableTranslatedLanguages'] as List<dynamic>? ??
+                const [])
+            .cast<String>();
+
     return Manga(
       id: json['id'],
       title: mangaTitle,
       description: attributes['description']?['en'],
       tags: tags,
+      availableTranslatedLanguages: langs,
       status: attributes['status'] ?? 'unknown',
       year: attributes['year'],
       author: null, // Will be populated separately if needed
