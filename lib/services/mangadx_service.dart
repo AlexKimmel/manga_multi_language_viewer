@@ -264,4 +264,36 @@ class MangaDexService {
       throw Exception('Unexpected error: $e');
     }
   }
+
+  /// Get list of page image URLs for a chapter (data-saver by default)
+  Future<List<String>> getChapterImageUrls(String chapterId,
+      {bool dataSaver = true}) async {
+    try {
+      final resp = await _dio.get('$baseUrl/at-home/server/$chapterId');
+      if (resp.statusCode == 200) {
+        final base = resp.data['baseUrl'] as String?;
+        final chapter = resp.data['chapter'] as Map<String, dynamic>?;
+        if (base == null || chapter == null) {
+          throw Exception('Malformed at-home response');
+        }
+        final hash = chapter['hash'] as String?;
+        final List<dynamic> files = (dataSaver
+                ? (chapter['dataSaver'] as List<dynamic>?)
+                : (chapter['data'] as List<dynamic>?)) ??
+            const [];
+        if (hash == null) {
+          throw Exception('Missing chapter hash');
+        }
+        final dir = dataSaver ? 'data-saver' : 'data';
+        return files.map((f) => '$base/$dir/$hash/$f').cast<String>().toList();
+      }
+      throw Exception(
+          'Failed to load chapter images: ${resp.statusCode} ${resp.statusMessage}');
+    } on DioException catch (e) {
+      final detail = e.response?.data ?? e.message;
+      throw Exception('Network error: $detail');
+    } catch (e) {
+      throw Exception('Unexpected error: $e');
+    }
+  }
 }

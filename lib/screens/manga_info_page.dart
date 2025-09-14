@@ -7,6 +7,7 @@ import '../models/manga.dart';
 import '../models/chapter.dart';
 import '../services/mangadx_service.dart';
 import '../providers/settings_provider.dart';
+import 'dual_chapter_reader.dart';
 
 class MangaInfoPage extends StatefulWidget {
   final Manga manga;
@@ -25,6 +26,8 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
 
   Manga? _detailedManga;
   List<Chapter> _chapters = [];
+  // When two languages are selected, we create pairs of chapters present in both languages
+  List<_ChapterPair> _chapterPairs = [];
   List<String> _availableLanguages = [];
   bool _isLoadingChapters = true;
   String? _errorMessage;
@@ -82,6 +85,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
       setState(() {
         _isLoadingChapters = true;
         _chapters = [];
+        _chapterPairs = [];
       });
       final settings = context.read<SettingsProvider>();
       final primary = settings.primaryLanguage;
@@ -134,17 +138,19 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
           .toList()
         ..sort((a, b) => _chapterSortValue(a).compareTo(_chapterSortValue(b)));
 
-      // Flatten interleaved: primary then secondary for each chapter key
-      final matched = <Chapter>[];
+      // Build paired list: a single entry per chapter key containing both languages
+      final pairs = <_ChapterPair>[];
       for (final k in keys) {
-        matched
-          ..add(primaryByKey[k]!)
-          ..add(secondaryByKey[k]!);
+        pairs.add(_ChapterPair(
+          key: k,
+          primary: primaryByKey[k]!,
+          secondary: secondaryByKey[k]!,
+        ));
       }
 
       if (mounted) {
         setState(() {
-          _chapters = matched;
+          _chapterPairs = pairs;
           _isLoadingChapters = false;
         });
       }
@@ -313,7 +319,9 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
               boxShadow: [
                 BoxShadow(
                   color: MacosTheme.brightnessOf(context).resolve(
+                    // ignore: deprecated_member_use
                     Colors.black.withOpacity(0.1),
+                    // ignore: deprecated_member_use
                     Colors.black.withOpacity(0.3),
                   ),
                   blurRadius: 12,
@@ -674,7 +682,9 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                 const ProgressCircle(radius: 12)
               else
                 Text(
-                  '${_chapters.length} chapters',
+                  _chapterPairs.isNotEmpty
+                      ? '${_chapterPairs.length} chapters'
+                      : '${_chapters.length} chapters',
                   style: MacosTheme.of(context).typography.caption1,
                 ),
             ],
@@ -687,7 +697,7 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                 child: ProgressCircle(radius: 20),
               ),
             )
-          else if (_chapters.isEmpty)
+          else if (_chapterPairs.isEmpty && _chapters.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -714,10 +724,98 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                 ),
               ),
             )
+          else if (_chapterPairs.isNotEmpty)
+            _buildPairedChaptersList()
           else
             _buildChaptersList(),
         ],
       ),
+    );
+  }
+
+  Widget _buildPairedChaptersList() {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _chapterPairs.length > 50 ? 50 : _chapterPairs.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 1,
+        color: MacosTheme.brightnessOf(context).resolve(
+          const Color(0xFFE5E5E7),
+          const Color(0xFF38383A),
+        ),
+      ),
+      itemBuilder: (context, index) {
+        final pair = _chapterPairs[index];
+        final primaryInfo =
+            SupportedLanguages.getLanguageInfo(pair.primary.language);
+        final secondaryInfo =
+            SupportedLanguages.getLanguageInfo(pair.secondary.language);
+        final label =
+            pair.primary.chapterNumber ?? pair.secondary.chapterNumber ?? '-';
+        final title = pair.primary.title.isNotEmpty
+            ? pair.primary.title
+            : pair.secondary.title;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DualChapterReader(
+                    primary: pair.primary,
+                    secondary: pair.secondary,
+                  ),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Text('Ch. $label',
+                      style: MacosTheme.of(context).typography.body.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: MacosTheme.of(context).typography.body,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Language badges
+                  _langBadge(primaryInfo?.flag ?? '🌐',
+                      primaryInfo?.name ?? pair.primary.language.toUpperCase()),
+                  const SizedBox(width: 6),
+                  _langBadge(
+                      secondaryInfo?.flag ?? '🌐',
+                      secondaryInfo?.name ??
+                          pair.secondary.language.toUpperCase()),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _langBadge(String flag, String name) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: MacosTheme.brightnessOf(context).resolve(
+          const Color(0xFFF2F2F7),
+          const Color(0xFF2C2C2E),
+        ),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('$flag $name',
+          style: MacosTheme.of(context).typography.caption1),
     );
   }
 
@@ -876,4 +974,12 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
       }).toList(),
     );
   }
+}
+
+class _ChapterPair {
+  final String key;
+  final Chapter primary;
+  final Chapter secondary;
+  _ChapterPair(
+      {required this.key, required this.primary, required this.secondary});
 }

@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -30,9 +28,7 @@ Future<void> main() async {
     eventListenerMode: EventListenerMode.synchronous,
     maxEntries: 1000,
     expiryPolicy: const AccessedExpiryPolicy(Duration(hours: 2)),
-  )
-    ..on<CacheEntryCreatedEvent>()
-        .listen((event) => log('Key "${event.entry.key}" added to the cache'));
+  );
 
   // Configure Dio client with cache interceptor
   final dio = Dio(BaseOptions(
