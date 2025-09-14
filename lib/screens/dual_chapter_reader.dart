@@ -35,6 +35,11 @@ class _DualChapterReaderState extends State<DualChapterReader> {
   bool showSecondary = false; // toggled with spacebar
   List<String> _primaryImgs = [];
   List<String> _secondaryImgs = [];
+  // Soft-hide state per language
+  final Set<int> _hiddenPrimary = <int>{};
+  final Set<int> _hiddenSecondary = <int>{};
+  List<int> _visiblePrimary = <int>[];
+  List<int> _visibleSecondary = <int>[];
   int _pageCount = 0;
   bool _loading = true;
   String? _error;
@@ -100,6 +105,8 @@ class _DualChapterReaderState extends State<DualChapterReader> {
       setState(() {
         _primaryImgs = imgsA.take(count).toList();
         _secondaryImgs = imgsB.take(count).toList();
+        _visiblePrimary = List<int>.generate(count, (i) => i);
+        _visibleSecondary = List<int>.generate(count, (i) => i);
         _pageCount = count;
         _loading = false;
       });
@@ -128,14 +135,77 @@ class _DualChapterReaderState extends State<DualChapterReader> {
 
   // Prefetch current, previous, and next pages for both languages
   void _prefetchAround(int index) {
-    if (!mounted || _pageCount == 0) return;
+    if (!mounted) return;
+    final minLen = _visiblePrimary.length < _visibleSecondary.length
+        ? _visiblePrimary.length
+        : _visibleSecondary.length;
+    if (minLen == 0) return;
     final ctx = context;
     final candidates = <int>{index, index - 1, index + 1}
-        .where((i) => i >= 0 && i < _pageCount)
+        .where((i) => i >= 0 && i < minLen)
         .toList();
     for (final i in candidates) {
-      _precacheUrl(ctx, _primaryImgs[i]);
-      _precacheUrl(ctx, _secondaryImgs[i]);
+      final pi = _visiblePrimary[i];
+      final si = _visibleSecondary[i];
+      _precacheUrl(ctx, _primaryImgs[pi]);
+      _precacheUrl(ctx, _secondaryImgs[si]);
+    }
+  }
+
+  void _recomputeVisibleAndClamp() {
+    final total = _primaryImgs.length < _secondaryImgs.length
+        ? _primaryImgs.length
+        : _secondaryImgs.length;
+    // Ensure visible lists match total length (guard for reloads)
+    if (_visiblePrimary.length != total) {
+      _visiblePrimary = List<int>.generate(total, (i) => i)
+        ..removeWhere((i) => _hiddenPrimary.contains(i));
+    } else {
+      _visiblePrimary = List<int>.generate(total, (i) => i)
+        ..removeWhere((i) => _hiddenPrimary.contains(i));
+    }
+    if (_visibleSecondary.length != total) {
+      _visibleSecondary = List<int>.generate(total, (i) => i)
+        ..removeWhere((i) => _hiddenSecondary.contains(i));
+    } else {
+      _visibleSecondary = List<int>.generate(total, (i) => i)
+        ..removeWhere((i) => _hiddenSecondary.contains(i));
+    }
+
+    final newCount = _visiblePrimary.length < _visibleSecondary.length
+        ? _visiblePrimary.length
+        : _visibleSecondary.length;
+    _pageCount = newCount;
+    if (_currentPage >= _pageCount) {
+      _currentPage = _pageCount > 0 ? _pageCount - 1 : 0;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(_currentPage);
+      }
+    }
+  }
+
+  void _toggleHide({required bool isPrimary, required int originalIndex}) {
+    setState(() {
+      final setRef = isPrimary ? _hiddenPrimary : _hiddenSecondary;
+      if (setRef.contains(originalIndex)) {
+        setRef.remove(originalIndex);
+      } else {
+        setRef.add(originalIndex);
+      }
+      _recomputeVisibleAndClamp();
+    });
+    // Keep thumbnails roughly centered on the current mapping
+    if (_pageCount > 0) {
+      final ap = _currentPage < _visiblePrimary.length
+          ? _visiblePrimary[_currentPage]
+          : null;
+      final as = _currentPage < _visibleSecondary.length
+          ? _visibleSecondary[_currentPage]
+          : null;
+      if (ap != null || as != null) {
+        _scrollThumbsToMapped(
+            primaryOriginalIndex: ap, secondaryOriginalIndex: as);
+      }
     }
   }
 
@@ -166,26 +236,7 @@ class _DualChapterReaderState extends State<DualChapterReader> {
     _syncingThumbs = false;
   }
 
-  // Scroll thumbnails to make the given page index visible (rough centering)
-  void _scrollThumbsTo(int index) {
-    if (!_thumbPrimaryCtrl.hasClients || !_thumbSecondaryCtrl.hasClients)
-      return;
-    final viewport = _thumbPrimaryCtrl.position.viewportDimension;
-    final target =
-        (index * _thumbItemExtent) - (viewport / 2) + (_thumbItemExtent / 2);
-    final clamped =
-        target.clamp(0.0, _thumbPrimaryCtrl.position.maxScrollExtent);
-    _thumbPrimaryCtrl.animateTo(
-      clamped,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
-    _thumbSecondaryCtrl.animateTo(
-      clamped.clamp(0.0, _thumbSecondaryCtrl.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
-  }
+  // (replaced by _scrollThumbsToMapped)
 
   @override
   Widget build(BuildContext context) {
@@ -252,15 +303,34 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                       // reset zoom on page change
                       _zoomController.value = Matrix4.identity();
                       // ensure thumbnails track the current page
-                      WidgetsBinding.instance
-                          .addPostFrameCallback((_) => _scrollThumbsTo(i));
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        final ap = _currentPage < _visiblePrimary.length
+                            ? _visiblePrimary[_currentPage]
+                            : null;
+                        final as = _currentPage < _visibleSecondary.length
+                            ? _visibleSecondary[_currentPage]
+                            : null;
+                        _scrollThumbsToMapped(
+                            primaryOriginalIndex: ap,
+                            secondaryOriginalIndex: as);
+                      });
                     },
                     itemBuilder: (context, index) {
                       final mq = MediaQuery.of(context);
                       final cacheWidth =
                           (mq.size.width * mq.devicePixelRatio).round();
-                      final topUrl = _primaryImgs[index];
-                      final bottomUrl = _secondaryImgs[index];
+                      final pi = _visiblePrimary.isNotEmpty &&
+                              index < _visiblePrimary.length
+                          ? _visiblePrimary[index]
+                          : 0;
+                      final si = _visibleSecondary.isNotEmpty &&
+                              index < _visibleSecondary.length
+                          ? _visibleSecondary[index]
+                          : 0;
+                      final topUrl =
+                          _primaryImgs.isNotEmpty ? _primaryImgs[pi] : '';
+                      final bottomUrl =
+                          _secondaryImgs.isNotEmpty ? _secondaryImgs[si] : '';
                       final topProvider =
                           ResizeImage(NetworkImage(topUrl), width: cacheWidth);
                       final bottomProvider = ResizeImage(
@@ -424,15 +494,28 @@ class _DualChapterReaderState extends State<DualChapterReader> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildThumbRow(_primaryImgs, isPrimary: true),
+          _buildThumbRow(
+            _primaryImgs,
+            isPrimary: true,
+            activeOriginalIndex: _currentPage < _visiblePrimary.length
+                ? _visiblePrimary[_currentPage]
+                : -1,
+          ),
           const SizedBox(height: 4),
-          _buildThumbRow(_secondaryImgs, isPrimary: false),
+          _buildThumbRow(
+            _secondaryImgs,
+            isPrimary: false,
+            activeOriginalIndex: _currentPage < _visibleSecondary.length
+                ? _visibleSecondary[_currentPage]
+                : -1,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildThumbRow(List<String> urls, {required bool isPrimary}) {
+  Widget _buildThumbRow(List<String> urls,
+      {required bool isPrimary, required int activeOriginalIndex}) {
     final controller = isPrimary ? _thumbPrimaryCtrl : _thumbSecondaryCtrl;
     return SizedBox(
       height: _thumbRowHeight,
@@ -442,7 +525,10 @@ class _DualChapterReaderState extends State<DualChapterReader> {
         itemExtent: _thumbItemExtent + 2, // include spacing between items
         itemCount: urls.length,
         itemBuilder: (context, i) {
-          final isActive = i == _currentPage;
+          final isHidden = isPrimary
+              ? _hiddenPrimary.contains(i)
+              : _hiddenSecondary.contains(i);
+          final isActive = i == activeOriginalIndex;
           return Align(
             alignment: Alignment.centerLeft,
             child: SizedBox(
@@ -453,12 +539,25 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
+                    if (isHidden) return; // disabled while hidden
                     if (_pageController.hasClients) {
-                      _pageController.animateToPage(
-                        i,
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                      );
+                      // map original index to page position in its visible list
+                      final visList =
+                          isPrimary ? _visiblePrimary : _visibleSecondary;
+                      final targetPos = visList.indexOf(i);
+                      if (targetPos >= 0 && targetPos < _pageCount) {
+                        _pageController.animateToPage(
+                          targetPos,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                        );
+                      } else if (targetPos >= 0 && _pageCount > 0) {
+                        _pageController.animateToPage(
+                          _pageCount - 1,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                        );
+                      }
                     }
                   },
                   child: Container(
@@ -469,13 +568,19 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                       color: Colors.black.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color:
-                            isActive ? const Color(0xFF4FC3F7) : Colors.white24,
+                        color: isActive
+                            ? const Color(0xFF4FC3F7)
+                            : (isHidden ? Colors.white12 : Colors.white24),
                         width: isActive ? 2.0 : 1.0,
                       ),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: _buildThumbImage(urls[i]),
+                    child: _buildThumbImage(
+                      url: urls[i],
+                      isPrimary: isPrimary,
+                      originalIndex: i,
+                      isHidden: isHidden,
+                    ),
                   ),
                 ),
               ),
@@ -486,7 +591,12 @@ class _DualChapterReaderState extends State<DualChapterReader> {
     );
   }
 
-  Widget _buildThumbImage(String url) {
+  Widget _buildThumbImage({
+    required String url,
+    required bool isPrimary,
+    required int originalIndex,
+    required bool isHidden,
+  }) {
     // Create a small resized image to save memory/bandwidth
     final provider = ResizeImage(
       NetworkImage(url),
@@ -497,15 +607,20 @@ class _DualChapterReaderState extends State<DualChapterReader> {
       fit: StackFit.expand,
       alignment: Alignment.center,
       children: [
-        Image(
-          image: provider,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.low,
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: Colors.black26,
-            alignment: Alignment.center,
-            child: const Icon(CupertinoIcons.exclamationmark_triangle,
-                size: 16, color: Colors.white70),
+        ColorFiltered(
+          colorFilter: isHidden
+              ? const ColorFilter.mode(Colors.black45, BlendMode.darken)
+              : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+          child: Image(
+            image: provider,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Colors.black26,
+              alignment: Alignment.center,
+              child: const Icon(CupertinoIcons.exclamationmark_triangle,
+                  size: 16, color: Colors.white70),
+            ),
           ),
         ),
         Positioned(
@@ -513,13 +628,56 @@ class _DualChapterReaderState extends State<DualChapterReader> {
           right: 0,
           child: GestureDetector(
             onTap: () {
-              // make this page grey out the icon change and remove this 
-              // page from the viewer so the user can sync the pages of the two translations
+              _toggleHide(isPrimary: isPrimary, originalIndex: originalIndex);
             },
-            child: Icon(Icons.visibility_rounded),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Icon(
+                isHidden
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded,
+                size: 16,
+                color: isHidden ? Colors.redAccent : Colors.white,
+              ),
+            ),
           ),
         ),
       ],
     );
+  }
+
+  // Scroll the thumbnail rows to keep provided original indices visible
+  void _scrollThumbsToMapped(
+      {int? primaryOriginalIndex, int? secondaryOriginalIndex}) {
+    if (_thumbPrimaryCtrl.hasClients && primaryOriginalIndex != null) {
+      final viewport = _thumbPrimaryCtrl.position.viewportDimension;
+      final target = (primaryOriginalIndex * _thumbItemExtent) -
+          (viewport / 2) +
+          (_thumbItemExtent / 2);
+      final clamped =
+          target.clamp(0.0, _thumbPrimaryCtrl.position.maxScrollExtent);
+      _thumbPrimaryCtrl.animateTo(
+        clamped,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (_thumbSecondaryCtrl.hasClients && secondaryOriginalIndex != null) {
+      final viewport = _thumbSecondaryCtrl.position.viewportDimension;
+      final target = (secondaryOriginalIndex * _thumbItemExtent) -
+          (viewport / 2) +
+          (_thumbItemExtent / 2);
+      final clamped =
+          target.clamp(0.0, _thumbSecondaryCtrl.position.maxScrollExtent);
+      _thumbSecondaryCtrl.animateTo(
+        clamped,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 }
