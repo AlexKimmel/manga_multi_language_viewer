@@ -103,14 +103,37 @@ class _DualChapterReaderState extends State<DualChapterReader> {
 
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
+    return Focus(
       focusNode: _focus,
-      onKeyEvent: (e) {
-        if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.space) {
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.space) {
           setState(() => showSecondary = !showSecondary);
+
           // Make sure the hidden layer is ready when toggled
           _prefetchAround(_currentPage);
+          return KeyEventResult.handled;
         }
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowRight) {
+          if (_currentPage < _pageCount - 1) {
+            _pageController.nextPage(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut);
+            return KeyEventResult.handled;
+          }
+        }
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+          if (_currentPage > 0) {
+            _pageController.previousPage(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut);
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
       },
       child: MacosScaffold(
         toolBar: ToolBar(
@@ -196,7 +219,7 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                       children: [
                         // Top image (primary)
                         buildImg(topProvider),
-                        
+
                         // Bottom image (secondary) stays mounted; just hide/show via opacity
                         AnimatedOpacity(
                           duration: const Duration(milliseconds: 150),
