@@ -20,6 +20,9 @@ class _DualChapterReaderState extends State<DualChapterReader> {
   late final MangaDexService _service;
   late final FocusNode _focus;
   late final PageController _pageController;
+  late final TransformationController _zoomController;
+
+  bool _isZoomed = false;
   bool showSecondary = false; // toggled with spacebar
   List<String> _primaryImgs = [];
   List<String> _secondaryImgs = [];
@@ -31,9 +34,11 @@ class _DualChapterReaderState extends State<DualChapterReader> {
   @override
   void initState() {
     super.initState();
-    _service = MangaDexService(context.read<Dio>());
+    _zoomController = TransformationController();
+    _zoomController.addListener(_onZoomChanged);
     _focus = FocusNode();
     _pageController = PageController();
+    _service = MangaDexService(context.read<Dio>());
     _load();
     // Ensure keyboard focus after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
@@ -43,7 +48,18 @@ class _DualChapterReaderState extends State<DualChapterReader> {
   void dispose() {
     _focus.dispose();
     _pageController.dispose();
+    _zoomController.dispose();
     super.dispose();
+  }
+
+  void _onZoomChanged() {
+    final scale = _zoomController.value.getMaxScaleOnAxis();
+    final z = scale > 1.0001;
+    if (z != _isZoomed) {
+      setState(() {
+        _isZoomed = z;
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -137,7 +153,7 @@ class _DualChapterReaderState extends State<DualChapterReader> {
       },
       child: MacosScaffold(
         toolBar: ToolBar(
-          title: Text('Reader - ${widget.primary.title}'),
+          title: const Text('Reader'),
           leading: MacosIconButton(
             icon: const MacosIcon(CupertinoIcons.back),
             onPressed: () => Navigator.of(context).pop(),
@@ -155,9 +171,14 @@ class _DualChapterReaderState extends State<DualChapterReader> {
               return PageView.builder(
                 controller: _pageController,
                 itemCount: _pageCount,
+                physics: _isZoomed
+                    ? const NeverScrollableScrollPhysics()
+                    : const PageScrollPhysics(),
                 onPageChanged: (i) {
                   setState(() => _currentPage = i);
                   _prefetchAround(i);
+                  // reset zoom on page change
+                  _zoomController.value = Matrix4.identity();
                 },
                 itemBuilder: (context, index) {
                   final mq = MediaQuery.of(context);
@@ -213,20 +234,33 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                     );
                   }
 
-                  return Center(
-                    child: Stack(
-                      alignment: Alignment.topCenter,
-                      children: [
-                        // Top image (primary)
-                        buildImg(topProvider),
-
-                        // Bottom image (secondary) stays mounted; just hide/show via opacity
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 150),
-                          opacity: showSecondary ? 1.0 : 0.0,
-                          child: buildImg(bottomProvider),
-                        ),
-                      ],
+                  return InteractiveViewer(
+                    transformationController: _zoomController,
+                    minScale: 1.0,
+                    maxScale: 4.0,
+                    panEnabled: _isZoomed,
+                    scaleEnabled: true,
+                    boundaryMargin: const EdgeInsets.all(0),
+                    clipBehavior: Clip.none,
+                    onInteractionEnd: (details) {
+                      // if user ended near 1x, snap back to exactly 1x
+                      final scale = _zoomController.value.getMaxScaleOnAxis();
+                      if (scale < 1.0001) {
+                        _zoomController.value = Matrix4.identity();
+                      }
+                    },
+                    child: Center(
+                      child: Stack(
+                        alignment: Alignment.topCenter,
+                        children: [
+                          buildImg(topProvider),
+                          AnimatedOpacity(
+                            duration: const Duration(milliseconds: 150),
+                            opacity: showSecondary ? 1.0 : 0.0,
+                            child: buildImg(bottomProvider),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },
