@@ -900,10 +900,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   return Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
-                        // TODO: Navigate to chapter reader
-                        print('Open chapter: ${chapter.title}');
-                      },
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
@@ -960,11 +956,6 @@ class _MangaInfoPageState extends State<MangaInfoPage> {
                   padding: const EdgeInsets.all(12),
                   child: PushButton(
                     controlSize: ControlSize.small,
-                    onPressed: () {
-                      // TODO: Show all chapters in a separate view
-                      print(
-                          'Show all ${chapters.length} chapters for $language');
-                    },
                     child: Text('Show ${chapters.length - 10} more chapters'),
                   ),
                 ),

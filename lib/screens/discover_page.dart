@@ -61,7 +61,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     // More aggressive loading triggers for better UX
     const triggerDistance = 600.0; // Increased from 400 to be more proactive
-    const triggerPercentage = 0.75; // Reduced from 0.8 to trigger earlier
+    const triggerPercentage = 0.8;
 
     final isNearBottom = currentPixels >= (maxScrollExtent - triggerDistance);
     final isPastThreshold = maxScrollExtent > 0 &&

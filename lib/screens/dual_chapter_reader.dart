@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import 'package:macos_ui/macos_ui.dart';
@@ -22,6 +23,8 @@ class _DualChapterReaderState extends State<DualChapterReader> {
   late final PageController _pageController;
   late final TransformationController _zoomController;
 
+  bool _showBottomBar = false;
+  static const double _hoverRevealHeight = 75.0;
   bool _isZoomed = false;
   bool showSecondary = false; // toggled with spacebar
   List<String> _primaryImgs = [];
@@ -68,13 +71,15 @@ class _DualChapterReaderState extends State<DualChapterReader> {
       _error = null;
     });
     try {
-      final imgsA = await _service.getChapterImageUrls(widget.primary.id,
-          dataSaver: true);
-      final imgsB = await _service.getChapterImageUrls(widget.secondary.id,
-          dataSaver: true);
-      final count = imgsA.length < imgsB.length
-          ? imgsA.length
-          : imgsB.length; // align by shortest
+      final imgsA = await _service.getChapterImageUrls(
+        widget.primary.id,
+        dataSaver: true,
+      );
+      final imgsB = await _service.getChapterImageUrls(
+        widget.secondary.id,
+        dataSaver: true,
+      );
+      final count = imgsA.length < imgsB.length ? imgsA.length : imgsB.length;
       setState(() {
         _primaryImgs = imgsA.take(count).toList();
         _secondaryImgs = imgsB.take(count).toList();
@@ -234,34 +239,111 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                     );
                   }
 
-                  return InteractiveViewer(
-                    transformationController: _zoomController,
-                    minScale: 1.0,
-                    maxScale: 4.0,
-                    panEnabled: _isZoomed,
-                    scaleEnabled: true,
-                    boundaryMargin: const EdgeInsets.all(0),
-                    clipBehavior: Clip.none,
-                    onInteractionEnd: (details) {
-                      // if user ended near 1x, snap back to exactly 1x
-                      final scale = _zoomController.value.getMaxScaleOnAxis();
-                      if (scale < 1.0001) {
-                        _zoomController.value = Matrix4.identity();
-                      }
-                    },
-                    child: Center(
-                      child: Stack(
-                        alignment: Alignment.topCenter,
-                        children: [
-                          buildImg(topProvider),
-                          AnimatedOpacity(
-                            duration: const Duration(milliseconds: 150),
-                            opacity: showSecondary ? 1.0 : 0.0,
-                            child: buildImg(bottomProvider),
-                          ),
-                        ],
+                  return Stack(
+                    children: [
+                      // Thin hover strip at the bottom to reveal the bar without blocking content
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: _hoverRevealHeight,
+                        child: MouseRegion(
+                          opaque: false,
+                          onEnter: (_) {
+                            if (!_showBottomBar) {
+                              setState(() => _showBottomBar = true);
+                            }
+                          },
+                          onHover: (_) {
+                            if (!_showBottomBar) {
+                              setState(() => _showBottomBar = true);
+                            }
+                          },
+                          onExit: (_) {
+                            if (_showBottomBar) {
+                              setState(() => _showBottomBar = false);
+                            }
+                          },
+                          child: Container(color: Colors.transparent),
+                        ),
                       ),
-                    ),
+                      InteractiveViewer(
+                        transformationController: _zoomController,
+                        minScale: 1.0,
+                        maxScale: 4.0,
+                        panEnabled: _isZoomed,
+                        scaleEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(0),
+                        clipBehavior: Clip.none,
+                        onInteractionEnd: (details) {
+                          // if user ended near 1x, snap back to exactly 1x
+                          final scale =
+                              _zoomController.value.getMaxScaleOnAxis();
+                          if (scale < 1.0001) {
+                            _zoomController.value = Matrix4.identity();
+                          }
+                        },
+                        child: Center(
+                          child: Stack(
+                            alignment: Alignment.topCenter,
+                            children: [
+                              buildImg(topProvider),
+                              AnimatedOpacity(
+                                duration: const Duration(milliseconds: 150),
+                                opacity: showSecondary ? 1.0 : 0.0,
+                                child: buildImg(bottomProvider),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // (removed full-screen hover overlay to prevent interference with content)
+                      // Bottom bar for page alignment
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: MouseRegion(
+                          onEnter: (_) {
+                            if (!_showBottomBar) {
+                              setState(() => _showBottomBar = true);
+                            }
+                          },
+                          onExit: (_) {
+                            if (_showBottomBar) {
+                              setState(() => _showBottomBar = false);
+                            }
+                          },
+                          child: IgnorePointer(
+                            ignoring: !_showBottomBar,
+                            child: AnimatedSlide(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              offset: _showBottomBar
+                                  ? Offset.zero
+                                  : const Offset(0, 1),
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOut,
+                                opacity: _showBottomBar ? 1.0 : 0.0,
+                                child: Container(
+                                  height: 75,
+                                  color: const Color(0xFFFF0000),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    'Bottom Bar',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   );
                 },
               );
