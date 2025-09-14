@@ -33,6 +33,8 @@ class _DiscoverPageState extends State<DiscoverPage> {
   DateTime? _lastLoadMoreTime;
   static const int _pageSize =
       32; // Increased from 20 to 32 for better performance
+  // Prevent scheduling multiple post-frame checks per build.
+  bool _postFrameScheduled = false;
 
   @override
   void initState() {
@@ -79,6 +81,29 @@ class _DiscoverPageState extends State<DiscoverPage> {
         timeSinceLastLoad.inSeconds >= 1) {
       // Throttle to max 1 call per second
       _lastLoadMoreTime = now;
+      _loadMoreManga();
+    }
+  }
+
+  // Schedules a post-frame check to prefetch if the content doesn't fill the viewport.
+  void _scheduleAutoPrefetchCheck() {
+    if (_postFrameScheduled || !mounted) return;
+    _postFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _postFrameScheduled = false;
+      _autoPrefetchIfNotScrollable();
+    });
+  }
+
+  // If the grid isn't scrollable (e.g., after window resize) and more data exists,
+  // fetch the next page to avoid a soft lock where no scroll can happen.
+  void _autoPrefetchIfNotScrollable() {
+    if (!mounted) return;
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    final notScrollable = position.maxScrollExtent <= 0;
+    if (notScrollable && _hasMore && !_isLoading && !_isLoadingMore) {
       _loadMoreManga();
     }
   }
@@ -203,13 +228,14 @@ class _DiscoverPageState extends State<DiscoverPage> {
     final primary = settings.primaryLanguage;
     final secondary = settings.secondaryLanguage;
 
-    // If both are same, require that one language only
+    // If both are same, require that language only
     if (primary == secondary) {
       return list
           .where((m) => m.availableTranslatedLanguages.contains(primary))
           .toList();
     }
 
+    // Require both languages to be available
     return list
         .where((m) =>
             m.availableTranslatedLanguages.contains(primary) &&
@@ -237,6 +263,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
   Widget build(BuildContext context) {
     return Builder(
       builder: (context) {
+        // After each build (including window resizes), ensure enough items are loaded
+        // to make the view scrollable, otherwise prefetch more.
+        _scheduleAutoPrefetchCheck();
         return MacosScaffold(
           toolBar: ToolBar(
             enableBlur: true,
@@ -521,10 +550,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
           ),
 
         // Show "Load More" button as fallback if near end but not auto-loading
-        if (_hasMore &&
-            !_isLoadingMore &&
-            !_isLoading &&
-            _mangas.length >= _pageSize)
+        if (_hasMore && !_isLoadingMore && !_isLoading)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),

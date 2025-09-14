@@ -384,7 +384,7 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                       return InteractiveViewer(
                         transformationController: _zoomController,
                         minScale: 1.0,
-                        maxScale: 4.0,
+                        maxScale: 10.0,
                         panEnabled: _isZoomed,
                         scaleEnabled: true,
                         boundaryMargin: const EdgeInsets.all(0),
@@ -565,6 +565,7 @@ class _DualChapterReaderState extends State<DualChapterReader> {
                     width: _thumbItemExtent,
                     height: _thumbRowHeight,
                     decoration: BoxDecoration(
+                      // ignore: deprecated_member_use
                       color: Colors.black.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
