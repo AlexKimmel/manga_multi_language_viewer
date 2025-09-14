@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
@@ -23,6 +24,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   late MangaDexService _mangaDexService;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
 
   List<Manga> _mangas = [];
   bool _isLoading = false;
@@ -46,6 +48,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -128,6 +131,16 @@ class _DiscoverPageState extends State<DiscoverPage> {
             context.read<SettingsProvider>().preferredLanguages,
       );
 
+      // If a search started while the popular request was in-flight, don't overwrite search results.
+      if (!mounted || _currentSearchTerm != null) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       setState(() {
         _mangas = _filterBySelectedLanguages(response.data);
         _currentOffset = _pageSize;
@@ -145,8 +158,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   }
 
   Future<void> _searchManga(String searchTerm) async {
-    if (_isLoading) return;
-
+    // Don't block search if another load is in progress; latest request wins.
     setState(() {
       _isLoading = true;
       _mangas.clear();
@@ -157,7 +169,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
 
     try {
       final response = await _mangaDexService.searchManga(
-        query: _currentSearchTerm.toString(),
+        query: searchTerm.trim(),
         limit: _pageSize,
         offset: 0,
         loadCoversImmediately: false, // Load covers asynchronously
@@ -387,11 +399,17 @@ class _DiscoverPageState extends State<DiscoverPage> {
                               prefix: const Icon(CupertinoIcons.search),
                               controller: _searchController,
                               onChanged: (value) {
-                                if (value.isEmpty) {
-                                  _loadPopularManga();
-                                } else {
-                                  _searchManga(value);
-                                }
+                                // Debounce to avoid firing a request on every keystroke
+                                _searchDebounce?.cancel();
+                                _searchDebounce = Timer(
+                                    const Duration(milliseconds: 400), () {
+                                  final term = value.trim();
+                                  if (term.isEmpty) {
+                                    _loadPopularManga();
+                                  } else {
+                                    _searchManga(term);
+                                  }
+                                });
                               },
                             ),
                           ),

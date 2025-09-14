@@ -12,7 +12,7 @@ class MangaDexService {
 
   Future<MangaResponse> searchManga({
     required String query,
-    int limit = 24,
+    int limit = 50,
     int offset = 0,
     List<String> contentRatings = const ['safe'],
     List<String>? availableTranslatedLanguages,
@@ -124,7 +124,7 @@ class MangaDexService {
   }
 
   Future<MangaResponse> getPopularManga({
-    int limit = 20,
+    int limit = 50,
     int offset = 0,
     bool loadCoversImmediately = false,
     List<String>? availableTranslatedLanguages,

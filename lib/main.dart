@@ -107,30 +107,30 @@ class _MainViewState extends State<MainView> {
         ),
       ],
       child: MacosWindow(
-        sidebar: Sidebar(
-          minWidth: 200,
-          builder: (context, scrollController) => SidebarItems(
-            currentIndex: _pageIndex,
-            onChanged: (index) {
-              setState(() => _pageIndex = index);
-            },
-            items: const [
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.search),
-                label: Text('Discover'),
-              ),
-              SidebarItem(
-                leading: MacosIcon(CupertinoIcons.book),
-                label: Text('Reader'),
-              ),
-            ],
-          ),
-        ),
+        // sidebar: Sidebar(
+        //   minWidth: 200,
+        //   builder: (context, scrollController) => SidebarItems(
+        //     currentIndex: _pageIndex,
+        //     onChanged: (index) {
+        //       setState(() => _pageIndex = index);
+        //     },
+        //     items: const [
+        //       SidebarItem(
+        //         leading: MacosIcon(CupertinoIcons.search),
+        //         label: Text('Discover'),
+        //       ),
+        //       // SidebarItem(
+        //       //   leading: MacosIcon(CupertinoIcons.book),
+        //       //   label: Text('Reader'),
+        //       // ),
+        //     ],
+        //   ),
+        // ),
         child: IndexedStack(
           index: _pageIndex,
           children: const [
             DiscoverPage(),
-            ReaderPage(),
+            //ReaderPage(),
           ],
         ),
       ),
