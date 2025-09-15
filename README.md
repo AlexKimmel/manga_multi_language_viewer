@@ -28,6 +28,9 @@ https://github.com/user-attachments/assets/7d0eb726-d0e9-4fea-a2f8-467121633e8b
 
 
 ## 🚀 Getting Started
+if you just want to use the app check out the Release tab
+
+### Build it your self
 
 1. **Install Flutter**  
    Make sure you have [Flutter](https://docs.flutter.dev/get-started/install) set up.
