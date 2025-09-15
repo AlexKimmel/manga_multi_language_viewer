@@ -17,10 +17,11 @@ Filter results by one or more languages.
   - Toggle layers with the spacebar.  
   - Zoom and pan with smooth controls.  
 
-
+create-dmg --overwrite --volname "MangaMuliLanguageViewer" \
+  "MangaMuliLanguageViewer-macOS.dmg" "Manga Muli Language Viewer.app"
 ## 🎥 Demo
 
-[![Watch the demo](./assets/screen_shot.png)](./assets/screen_cap.mp4)  
+[![Watch the demo](./assets/screen_shot.png)](./assets/screen_cap.mov)  
 *Click the image to watch a short demo video.*
 
 
