@@ -1,17 +1,69 @@
-# manga_muli_language_viewer
+# Flutter Manga Multi Language Viewer
 
-A starter Flutter app for macOS with `macos_ui`.
+Read and compare manga across multiple translations, side by side.
 
-## Getting Started
+## ✨ Features
 
-This project is a starting point for a Flutter application specifically targeting macOS and uses the `macos_ui` plugin
-to achieve UI and UX that match native AppKit and SwiftUI as closely as possible.
+- 🔎 **Search MangaDex**  
+Browse the [MangaDex](https://mangadex.org) catalog by title.  
+Filter results by one or more languages.
 
-A few resources to get you started if this is your first time using `macos_ui`:
+- 📚 **Browse Chapters**  
+  View available chapters per language.  
+  Select two translations of the same chapter to compare.
 
-- [Generating Starter Apps](https://macosui.dev/docs/starter_apps)
-- [API Reference](https://pub.dev/documentation/macos_ui/latest/)
+- 📖 **Dual-Language Reader**  
+  Overlay two translations of a manga chapter.   
+  - Toggle layers with the spacebar.  
+  - Zoom and pan with smooth controls.  
 
-For help getting started with Flutter development in general, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+
+## 🎥 Demo
+
+[![Watch the demo](./assets/screen_shot.png)](./assets/screen_cap.mp4)  
+*Click the image to watch a short demo video.*
+
+
+## 🚀 Getting Started
+
+1. **Install Flutter**  
+   Make sure you have [Flutter](https://docs.flutter.dev/get-started/install) set up.
+
+2. **Clone this repo**  
+   ```bash
+   git clone https://github.com/AlexKimmel/manga_multi_language_viewer.git
+   cd flutter-manga-translator
+
+3.	**Install dependencies**
+    ``` bash 
+    flutter pub get
+    ```
+
+4. **Run the app**
+    ```
+    flutter run 
+    ```
+
+## 🖱️ Usage
+
+- **Search**: Enter a title and filter by language(s).  
+- **Pick a chapter**: Choose a chapter that is translated in both languages
+- **Read**: Pages are overlaid; press space to reviel the alternative translation
+- **Controls**:
+  - Spacebar → toggle top translation fully on/off  
+  - Scroll / pinch → zoom and pan  
+
+---
+
+## 🔧 Roadmap
+- Proper windows port 
+- Anki integration for vocab cards  
+- Offline caching of chapters  
+- Additional reader modes (side-by-side panels, vertical scroll)  
+
+---
+
+## ⚠️ Disclaimer
+
+This app does not host manga content. It uses the MangaDex API to fetch publicly available scanlations.  
+Please respect scanlation groups’ work and MangaDex’s terms of service.
