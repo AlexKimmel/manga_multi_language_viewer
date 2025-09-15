@@ -21,7 +21,7 @@ create-dmg --overwrite --volname "MangaMuliLanguageViewer" \
   "MangaMuliLanguageViewer-macOS.dmg" "Manga Muli Language Viewer.app"
 ## 🎥 Demo
 
-[![Watch the demo](./assets/screen_shot.png)](./assets/screen_cap.mov)  
+[![Watch the demo](./assets/screen_shot.png)](./assets/screen_cap.mp4)  
 *Click the image to watch a short demo video.*
 
 
