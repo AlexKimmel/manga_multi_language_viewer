@@ -20,8 +20,11 @@ Filter results by one or more languages.
 create-dmg --overwrite --volname "MangaMuliLanguageViewer" \
   "MangaMuliLanguageViewer-macOS.dmg" "Manga Muli Language Viewer.app"
 ## 🎥 Demo
-[![Watch the demo](./assets/screen_shot.png)]("https://raw.githubusercontent.com/AlexKimmel/manga_muli_language_viewer/main/assets/screen_cap.mp4")  
-*Click the image to watch a short demo video.*
+
+
+https://github.com/user-attachments/assets/7d0eb726-d0e9-4fea-a2f8-467121633e8b
+
+
 
 
 ## 🚀 Getting Started
